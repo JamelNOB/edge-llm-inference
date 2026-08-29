@@ -1,0 +1,20 @@
+# Edge LLM Streaming Inference & Benchmark Suite
+# 核心依赖清单 (兼容 Python 3.10+)
+
+# 1. 异步 Web 服务与流式输出 (SSE)
+fastapi>=0.110.0
+uvicorn[standard]>=0.28.0
+sse-starlette>=2.0.0
+pydantic>=2.6.0
+
+# 2. 端侧轻量化量化推理底座 (llama.cpp Python 绑定)
+llama-cpp-python>=0.2.75
+
+# 3. 权重自动化拉取 (支持 Hugging Face / ModelScope 国内镜像)
+huggingface_hub>=0.21.0
+modelscope>=1.13.0
+
+# 4. 性能监控与基准评测工具栈
+psutil>=5.9.8
+requests>=2.31.0
+rich>=13.7.0

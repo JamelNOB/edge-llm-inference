@@ -1,0 +1,49 @@
+{
+  "summary": {
+    "avg_ttft_ms": 117.65,
+    "avg_throughput_tokens_per_sec": 19.34,
+    "max_ram_mb": 1728.3
+  },
+  "details": [
+    {
+      "category": "Short QA",
+      "prompt_snippet": "用一句话解释什么是边缘计算？...",
+      "ttft_ms": 170.29,
+      "throughput_tokens_per_sec": 20.75,
+      "total_tokens": 28,
+      "total_duration_sec": 1.52,
+      "peak_ram_mb": 1719.84,
+      "peak_cpu_percent": 3826.8
+    },
+    {
+      "category": "Tech Concept",
+      "prompt_snippet": "请详细解释 Transformer 架构...",
+      "ttft_ms": 86.43,
+      "throughput_tokens_per_sec": 20.72,
+      "total_tokens": 125,
+      "total_duration_sec": 6.12,
+      "peak_ram_mb": 1722.37,
+      "peak_cpu_percent": 3788.5
+    },
+    {
+      "category": "Code Generation",
+      "prompt_snippet": "用 Python 实现一个快速排序算法函...",
+      "ttft_ms": 84.34,
+      "throughput_tokens_per_sec": 18.41,
+      "total_tokens": 128,
+      "total_duration_sec": 7.04,
+      "peak_ram_mb": 1724.46,
+      "peak_cpu_percent": 3739.0
+    },
+    {
+      "category": "Analytical Summary",
+      "prompt_snippet": "对比端侧大模型部署 (Edge LLM)...",
+      "ttft_ms": 129.52,
+      "throughput_tokens_per_sec": 17.46,
+      "total_tokens": 124,
+      "total_duration_sec": 7.23,
+      "peak_ram_mb": 1728.3,
+      "peak_cpu_percent": 3758.2
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+﻿# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Large Model Weights (GGUF > 100MB must not be pushed to GitHub)
+models/*.gguf
+models/.cache/
+.cache/
+
+# Environments & OS files
+.venv/
+env/
+venv/
+*.log
+.DS_Store
+Thumbs.db
