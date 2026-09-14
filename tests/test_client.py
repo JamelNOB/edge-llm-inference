@@ -1,18 +1,28 @@
-﻿# Edge LLM Streaming Inference Client
-# Terminal Typewriter Test with TTFT and Throughput Metrics
+"""
+Edge LLM Streaming Inference Client
+====================================
+Terminal Typewriter Test with TTFT and Throughput Metrics
+"""
 import sys
 import time
 import json
 import requests
+from pathlib import Path
+
+# 将项目根目录添加进 sys.path
+project_root = Path(__file__).resolve().parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+from src.core.config import SERVER_PORT
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
-SERVER_URL = "http://127.0.0.1:8000"
+SERVER_URL = f"http://127.0.0.1:{SERVER_PORT}"
 HEALTH_ENDPOINT = f"{SERVER_URL}/health"
 STREAM_ENDPOINT = f"{SERVER_URL}/v1/chat/stream"
 
-# ANSI Colors for Terminal
 CYAN = "\033[96m"
 GREEN = "\033[92m"
 YELLOW = "\033[93m"
@@ -20,14 +30,14 @@ MAGENTA = "\033[95m"
 BOLD = "\033[1m"
 RESET = "\033[0m"
 
-def check_server_health():
+def check_server_health() -> bool:
     """Verify backend server health and model status"""
     try:
         resp = requests.get(HEALTH_ENDPOINT, timeout=3)
         if resp.status_code == 200:
             data = resp.json()
-            print(f"{GREEN}[+] 服务状态正常 (Healthy)!{RESET}")
-            print(f"    - 加载模型: {CYAN}{data.get('model_name')}{RESET}")
+            print(f"{GREEN}[+] 服务状态正常 (Status: {data.get('status')})!{RESET}")
+            print(f"    - 加载模型: {CYAN}{data.get('model_name')}{RESET} (Mock: {data.get('is_mock')})")
             print(f"    - 进程内存占用 (RAM RSS): {CYAN}{data.get('memory', {}).get('process_ram_rss_mb')} MB{RESET}")
             print(f"    - CPU 逻辑核心数: {CYAN}{data.get('system', {}).get('cpu_cores_logical')}{RESET}")
             return True
@@ -98,23 +108,20 @@ def stream_chat(user_prompt: str):
         gen_time = end_time - (first_token_time or start_time)
         tokens_per_sec = (token_count / gen_time) if gen_time > 0 else 0
 
-        print(f"\n\n{BOLD}{MAGENTA}--- 实时性能实测指标 (Performance Metrics) ---{RESET}")
-        print(f"⏱  首字延迟 (TTFT - Time To First Token): {BOLD}{CYAN}{ttft_ms:.2f} ms{RESET}")
-        print(f"⚡ 生成吞吐速度 (Decoding Speed):          {BOLD}{GREEN}{tokens_per_sec:.2f} tokens/s{RESET}")
-        print(f"📊 生成总 Token 数 (Total Output Tokens):   {BOLD}{token_count}{RESET} tokens")
-        print(f"⏳ 总耗时 (Total Duration):                 {BOLD}{total_time:.2f} s{RESET}")
-        print(f"{BOLD}{MAGENTA}------------------------------------------------{RESET}\n")
+        print(f"\n\n{MAGENTA}" + "-" * 50 + f"{RESET}")
+        print(f"{BOLD}📊 性能统计 (Performance Metrics):{RESET}")
+        print(f"  • 首字时延 (TTFT):    {CYAN}{ttft_ms:.2f} ms{RESET} (KV Cache 预热保障)")
+        print(f"  • 生成 Token 数量:   {CYAN}{token_count}{RESET} tokens")
+        print(f"  • 解码吞吐速度:       {GREEN}{tokens_per_sec:.2f} tokens/s{RESET}")
+        print(f"  • 总响应耗时:         {CYAN}{total_time:.2f} s{RESET}")
+        print(f"{MAGENTA}" + "-" * 50 + f"{RESET}\n")
 
     except Exception as e:
-        print(f"\n[x] 流式读取异常: {e}")
-
-def main():
-    if not check_server_health():
-        return
-
-    default_prompt = "请用一句话通俗解释大模型 INT4 量化的核心原理。"
-    prompt = sys.argv[1] if len(sys.argv) > 1 else default_prompt
-    stream_chat(prompt)
+        print(f"\n[x] 请求异常: {e}")
 
 if __name__ == "__main__":
-    main()
+    if check_server_health():
+        prompt = "请简述端侧大模型为什么在量化压缩后在普通 CPU 上的生成吞吐速度反而更快？"
+        stream_chat(prompt)
+    else:
+        print(f"\n{YELLOW}[!] 提示: 请先运行 'python main.py' 启动服务端。{RESET}")
