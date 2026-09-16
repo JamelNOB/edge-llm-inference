@@ -6,14 +6,16 @@
 
 ## 🧭 一、 代码锚点速查表 (Ctrl+F 检索对照)
 
-面试官若让你共享屏幕或检查代码仓库，直接带面试官看以下四个文件：
+面试官若让你共享屏幕或检查代码仓库，直接带面试官看以下核心文件：
 
 | 简历核心技术点 (Claim) | 对应源码文件位置 | 核心函数 / 类名 | 核心考点与防穿帮要点 |
 | :--- | :--- | :--- | :--- |
 | **KV Cache 预热流水线** | [`src/engine/kv_cache.py`](src/engine/kv_cache.py) | `warmup_kv_cache()` | 证明预热的是注意力 KV 张量而非 RAG 知识库，启动时仅执行 `eval()` 前向计算。 |
 | **Q4_K_M 混合精度与带宽突破** | [`src/core/config.py`](src/core/config.py) | `DEFAULT_MODEL_PATH`<br>`DEFAULT_CPU_THREADS` | 源码头部有详尽架构注释：解释端侧为内存带宽受限 (Memory Bandwidth Bound)。 |
+| **Agent 分层记忆与 TTL 淘汰** | [`src/memory/agent_memory.py`](src/memory/agent_memory.py) | `AgentMemoryEngine`<br>`set_memory()`<br>`get_effective_memories()` | 证明通过 SQLite 惰性过期实现短时状态淘汰，杜绝历史状态污染长期用户画像。 |
+| **Slot UPSERT 冲突覆写** | [`src/memory/agent_memory.py`](src/memory/agent_memory.py) | `UNIQUE(user_id, key)`<br>`INSERT OR REPLACE` | 证明当用户喜好矛盾时，通过原子替换覆写旧记录，杜绝模型人格分裂。 |
+| **C++ 底层硬件压测** | [`scripts/benchmark_llama_cpp.sh`](scripts/benchmark_llama_cpp.sh)<br>[`benchmarks/llama_bench_report.md`](benchmarks/llama_bench_report.md) | `llama-bench` 指标 | 实测给出 Prefill 186.69 t/s 与 Decode 26.56 t/s 的真实硬件跑分。 |
 | **异步流式打字机网关** | [`src/server/routes.py`](src/server/routes.py) | `chat_stream()` | 基于 FastAPI 与 `EventSourceResponse` (SSE) 实现单向流式推送与 ChatML 解析。 |
-| **自适应 Mock 验证与基准评测** | [`src/engine/llm_engine.py`](src/engine/llm_engine.py)<br>[`scripts/benchmark.py`](scripts/benchmark.py) | `MockLlamaEngine`<br>`ServerResourceMonitor` | 证明离线 30 秒可测，无需 1GB 模型也可通过单元测试验证调用链路。 |
 
 ---
 
@@ -21,19 +23,19 @@
 
 > **面试官追问底层细节时（如：“底层 CUDA Kernel 是怎么写的？SIMD 汇编怎么排布的？”）：**  
 > 
-> 🗣️ **“我们项目定位于端侧应用与推理网关架构主理人。底层 GGUF 反量化与 CPU 矩阵计算依托于开源成熟的 llama.cpp C++ 底座；我的精力与核心自研工作聚焦在【端侧内存带宽瓶颈量化建模】、【Q4_K_M 混合精度量化选型】、【KV Cache 开机预热流水线】以及【异步流式 Web 服务编排】，在保障生产级稳定性的同时避免重复造底层算子轮子。”**
+> 🗣️ **“我们项目定位于端侧应用与推理网关架构主理人。底层 GGUF 反量化与 CPU 矩阵计算依托于开源成熟的 llama.cpp C++ 底座；我的精力与核心自研工作聚焦在【端侧内存带宽瓶颈量化建模】、【Q4_K_M 混合精度量化选型】、【KV Cache 开机预热流水线】、【分层 Agent 记忆治理与冲突消解】以及【异步流式 Web 服务编排】，在保障生产级稳定性的同时避免重复造底层算子轮子。”**
 
 ---
 
-## ⚡ 三、 四大高频技术鱼钩与【双轨答辩剧本】
+## ⚡ 三、 七大高频技术鱼钩与【双轨答辩剧本】
 
-### 🐟 鱼钩 1：为什么模型压缩后在 CPU 上反而变快（6.2 -> 19+ tokens/s）？
-- **数据出处**：`README.md` 实测基准表第一行（FP16: 3.85GB / 6.2 T/s；Q4_K_M: 1.69GB / 19.34 T/s）。
+### 🐟 鱼钩 1：为什么模型压缩后在 CPU 上反而变快（6.2 -> 26+ tokens/s）？
+- **数据出处**：`README.md` 实测基准表（FP16: 3.09GB / 6.2 T/s；Q4_K_M: 934MB / 26.56 T/s）。
 - **【轨道 A：脑内物理直觉】**：
-  > CPU 推理就像搬砖。CPU 的小口袋（L3 缓存）只有几十 MB，放不下整个模型，模型全在主板内存里。每吐一个字都得把全量模型从内存“马路”运进 CPU 一遍。原版 3.85GB 太胖，马路直接塞车（带宽堵死）；量化瘦身到 1.69GB 后马路通畅了，一秒钟能搬更多趟，吐字自然暴涨 3 倍。
+  > CPU 推理就像搬砖。CPU 的小口袋（L3 缓存）只有几十 MB，放不下整个模型，模型全在主板内存里。每吐一个字都得把全量模型从内存“马路”运进 CPU 一遍。原版 3.09GB 太胖，马路直接塞车（带宽堵死）；量化瘦身到 934MB 后马路通畅了，一秒钟能搬更多趟，吐字自然暴涨 4.2 倍。
 - **【轨道 B：大厂专业得分词】**：
   > **得分关键词**：`内存带宽受限 (Memory Bandwidth Bound)`、`自回归逐 Token 遍历访存`、`总线流量削减`。  
-  > “端侧 CPU 推理的核心瓶颈在于内存总线带宽而非算力。自回归模型每生成一个 Token 必须全量读取一次模型参数矩阵。原版 FP16 占满了带宽导致算力饥饿；Q4_K_M 量化将权重体积削减近 60%，直接解除了访存总线拥塞，使得流式吞吐由 6.2 释放至 19+ tokens/s。”
+  > “端侧 CPU 推理的核心瓶颈在于内存总线带宽而非算力。自回归模型每生成一个 Token 必须全量读取一次模型参数矩阵。原版 FP16 占满了带宽导致算力饥饿；Q4_K_M 量化将权重体积削减 70.3%，直接解除了访存总线拥塞，使得流式吞吐释放至 26.56 tokens/s。”
 
 ---
 
@@ -46,7 +48,35 @@
 
 ---
 
-### 🐟 鱼钩 3：KV Cache 预热到底预热了什么？（严禁混淆 RAG 知识库！）
+### 🐟 鱼钩 3：端侧推理时模型容易陷入“复读机死循环（Repetition Loop）”，为什么？怎么解决？
+- **【轨道 A：脑内物理直觉】**：
+  > 第一是没给答题卡：用户裸扔一句话，模型以为在玩成语接龙，进入自由瞎扯；第二是溜滑梯效应：一旦它吐出了第一个重复词，这个词就被写进了 KV Cache 记忆草稿纸，下一步模型看前面的词权重极高，马太效应越滚越大，彻底刹不住车！
+- **【轨道 B：大厂专业得分词】**：
+  > **得分关键词**：`ChatML 状态机模板对齐`、`KV Cache 累积注意力偏移`、`Repetition Penalty (重复惩罚)`、`EOS 动态截断`。  
+  > “本质在于两点：1) 输入必须显式注入 `<|im_start|>` 和 `<|im_end|>` 结构化标签，让模型正确进入 Assistant 解码状态机；2) 解码阶段必须施加 Repetition Penalty（对已在 KV Cache 中的 Token logits 实施衰减）并监听 EOS 提前 break 退出前向循环。”
+
+---
+
+### 🐟 鱼钩 4：Agent 记忆系统如何解决“用户喜好变更”导致的事实冲突？
+- **【轨道 A：脑内物理直觉】**：
+  > 手机通讯录改电话号码。张三告诉你新号码，你直接用橡皮擦把旧号码擦掉、把新号码写上去（覆写 Update）。如果建两个张三，打电话时系统肯定人格分裂！
+- **【轨道 B：大厂专业得分词】**：
+  > **得分关键词**：`Slot 槽位化提取`、`UNIQUE 约束`、`UPSERT (INSERT OR REPLACE) 原子覆写`。  
+  > 对应代码：`src/memory/agent_memory.py:set_memory()`。  
+  > “在表结构设计中定义 `UNIQUE(user_id, key) ON CONFLICT REPLACE`。当用户状态发生变更（如‘喜欢吃辣’变为‘胃溃疡禁辣’），以相同的 key 触发原子覆写，保证库内只留存唯一最新的真实事实，杜绝矛盾信息并存污染大模型 Prompt。”
+
+---
+
+### 🐟 鱼钩 5：Prefill 阶段与 Decode 阶段的计算特征有什么本质区别？
+- **【轨道 A：脑内物理直觉】**：
+  > Prefill（读题）是学生一口气读完整张卷子，所有字都在眼前，可以拉上所有兄弟一起分工算矩阵；Decode（答题）是闭着眼睛按规律一个字一个字往外挤，每次挤一个字都得把整本字典搬出来看一眼！
+- **【轨道 B：大厂专业得分词】**：
+  > **得分关键词**：`Prefill 为计算密集型 (Compute-Bound)`、`Decode 为访存受限 (Memory-Bound)`、`GQA (分组查询注意力)`。  
+  > “Prefill 阶段由于所有输入 Token 均已知，矩阵乘法可充分并行化（GEMM），算力利用率高（实测达 186.69 t/s）；Decode 阶段每次仅生成单 Token（GEMV），算力处于饥饿等待状态，系统吞吐完全受制于从内存搬运权重的总线带宽。”
+
+---
+
+### 🐟 鱼钩 6：KV Cache 预热到底预热了什么？（严禁混淆 RAG 知识库！）
 - **【轨道 A：脑内物理直觉】**：
   > 厨师营业前先把葱姜蒜切好备在案板上（留好注意力草稿纸），客人进门点菜直接下锅开炒。绝对不是在脑子里死背一本外部百科全书！
 - **【轨道 B：大厂专业得分词】**：
@@ -56,7 +86,7 @@
 
 ---
 
-### 🐟 鱼钩 4：为什么流式传输选 SSE 而不用 WebSocket？
+### 🐟 鱼钩 7：为什么流式传输选 SSE 而不用 WebSocket？
 - **【轨道 A：脑内物理直觉】**：
   > 大模型文字输出是单向广播打字机，不是双向打电话。单向广播用最轻的喇叭（SSE）就行，没必要架设双向全双工电话线（WebSocket）。
 - **【轨道 B：大厂专业得分词】**：
