@@ -1,0 +1,27 @@
+{
+  "squat": {
+    "action_name": "深蹲 (Squat)",
+    "target_muscle_groups": ["股四头肌", "臀大肌", "内收大肌", "核心肌群"],
+    "biomechanical_thresholds": {
+      "knee_flexion_angle": {
+        "ideal_range": [80, 90],
+        "warning_above": 110,
+        "warning_message": "下蹲深度未达大腿水平，属于半蹲，无法有效刺激臀部肌群"
+      },
+      "knee_valgus_deviation": {
+        "max_safe_deviation_deg": 5,
+        "warning_above": 10,
+        "warning_message": "膝关节内扣，前交叉韧带(ACL)与内侧半月板承受异常剪切应力"
+      },
+      "torso_lean_angle": {
+        "ideal_range": [40, 55],
+        "warning_below": 35,
+        "warning_message": "躯干过度前倾(折叠塌腰)，腰椎L4-L5竖脊肌受压过大"
+      }
+    },
+    "injury_contraindications": {
+      "meniscus_tear": "既往半月板损伤患者严禁在内扣状态下负重，下蹲幅度应限制在无痛区间(建议不小于90度)",
+      "lumbar_strain": "腰肌劳损患者需强化腹式呼吸腹内压，严禁骨盆后倾(Butt Wink)与塌腰代偿"
+    }
+  }
+}
