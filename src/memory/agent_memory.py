@@ -28,24 +28,28 @@ class AgentMemoryEngine:
         self._init_db()
 
     def _init_db(self):
-        with sqlite3.connect(self.db_path) as conn:
-            conn.cursor().execute("""
-                CREATE TABLE IF NOT EXISTS memories (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id TEXT NOT NULL,
-                    key TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    category TEXT NOT NULL DEFAULT 'profile',
-                    importance INTEGER NOT NULL DEFAULT 3,
-                    created_at REAL NOT NULL,
-                    expires_at REAL,
-                    UNIQUE(user_id, key) ON CONFLICT REPLACE
-                )
-            """)
-            conn.cursor().execute("""
-                CREATE INDEX IF NOT EXISTS idx_user_expires 
-                ON memories (user_id, expires_at)
-            """)
+        conn = sqlite3.connect(self.db_path)
+        try:
+            with conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS memories (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id TEXT NOT NULL,
+                        key TEXT NOT NULL,
+                        content TEXT NOT NULL,
+                        category TEXT NOT NULL DEFAULT 'profile',
+                        importance INTEGER NOT NULL DEFAULT 3,
+                        created_at REAL NOT NULL,
+                        expires_at REAL,
+                        UNIQUE(user_id, key) ON CONFLICT REPLACE
+                    )
+                """)
+                conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_user_expires 
+                    ON memories (user_id, expires_at)
+                """)
+        finally:
+            conn.close()
 
     def set_memory(
         self,
@@ -70,12 +74,16 @@ class AgentMemoryEngine:
         now = time.time()
         expires_at = (now + ttl_seconds) if ttl_seconds > 0 else None
         
-        with sqlite3.connect(self.db_path) as conn:
-            conn.cursor().execute("""
-                INSERT OR REPLACE INTO memories 
-                (user_id, key, content, category, importance, created_at, expires_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (user_id, key, content, category, importance, now, expires_at))
+        conn = sqlite3.connect(self.db_path)
+        try:
+            with conn:
+                conn.execute("""
+                    INSERT OR REPLACE INTO memories 
+                    (user_id, key, content, category, importance, created_at, expires_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (user_id, key, content, category, importance, now, expires_at))
+        finally:
+            conn.close()
 
     def get_effective_memories(
         self,
@@ -87,48 +95,52 @@ class AgentMemoryEngine:
         获取当前有效且未过期的记忆列表 (附带惰性淘汰)
         """
         now = time.time()
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            # 1. 惰性淘汰 (Lazy Eviction): 顺手清理已过期的垃圾记录
-            cursor.execute("""
-                DELETE FROM memories 
-                WHERE expires_at IS NOT NULL AND expires_at <= ?
-            """, (now,))
-            
-            # 2. 查询有效记录
-            if category:
-                query = """
-                    SELECT key, content, category, importance, created_at, expires_at
-                    FROM memories 
-                    WHERE user_id = ? AND category = ?
-                    ORDER BY importance DESC, created_at DESC
-                    LIMIT ?
-                """
-                params = (user_id, category, limit)
-            else:
-                query = """
-                    SELECT key, content, category, importance, created_at, expires_at
-                    FROM memories 
-                    WHERE user_id = ?
-                    ORDER BY importance DESC, created_at DESC
-                    LIMIT ?
-                """
-                params = (user_id, limit)
+        conn = sqlite3.connect(self.db_path)
+        try:
+            with conn:
+                cursor = conn.cursor()
+                # 1. 惰性淘汰 (Lazy Eviction): 顺手清理已过期的垃圾记录
+                cursor.execute("""
+                    DELETE FROM memories 
+                    WHERE expires_at IS NOT NULL AND expires_at <= ?
+                """, (now,))
                 
-            cursor.execute(query, params)
-            rows = cursor.fetchall()
-            
-            results = []
-            for r in rows:
-                results.append({
-                    "key": r[0],
-                    "content": r[1],
-                    "category": r[2],
-                    "importance": r[3],
-                    "created_at": r[4],
-                    "expires_at": r[5]
-                })
-            return results
+                # 2. 查询有效记录
+                if category:
+                    query = """
+                        SELECT key, content, category, importance, created_at, expires_at
+                        FROM memories 
+                        WHERE user_id = ? AND category = ?
+                        ORDER BY importance DESC, created_at DESC
+                        LIMIT ?
+                    """
+                    params = (user_id, category, limit)
+                else:
+                    query = """
+                        SELECT key, content, category, importance, created_at, expires_at
+                        FROM memories 
+                        WHERE user_id = ?
+                        ORDER BY importance DESC, created_at DESC
+                        LIMIT ?
+                    """
+                    params = (user_id, limit)
+                    
+                cursor.execute(query, params)
+                rows = cursor.fetchall()
+                
+                results = []
+                for r in rows:
+                    results.append({
+                        "key": r[0],
+                        "content": r[1],
+                        "category": r[2],
+                        "importance": r[3],
+                        "created_at": r[4],
+                        "expires_at": r[5]
+                    })
+                return results
+        finally:
+            conn.close()
 
     def format_memory_prompt(self, user_id: str, max_tokens: int = 256) -> str:
         """

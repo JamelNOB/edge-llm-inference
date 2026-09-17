@@ -15,6 +15,7 @@
 | **Agent 分层记忆与 TTL 淘汰** | [`src/memory/agent_memory.py`](src/memory/agent_memory.py) | `AgentMemoryEngine`<br>`set_memory()`<br>`get_effective_memories()` | 证明通过 SQLite 惰性过期实现短时状态淘汰，杜绝历史状态污染长期用户画像。 |
 | **Slot UPSERT 冲突覆写** | [`src/memory/agent_memory.py`](src/memory/agent_memory.py) | `UNIQUE(user_id, key)`<br>`INSERT OR REPLACE` | 证明当用户喜好矛盾时，通过原子替换覆写旧记录，杜绝模型人格分裂。 |
 | **C++ 底层硬件压测** | [`scripts/benchmark_llama_cpp.sh`](scripts/benchmark_llama_cpp.sh)<br>[`benchmarks/llama_bench_report.md`](benchmarks/llama_bench_report.md) | `llama-bench` 指标 | 实测给出 Prefill 186.69 t/s 与 Decode 26.56 t/s 的真实硬件跑分。 |
+| **端侧双频异步视频质检** | [`run_video_coach.py`](run_video_coach.py)<br>[`src/vision/motion_analyzer.py`](src/vision/motion_analyzer.py) | `SquatStateMachine`<br>`VideoPostureCoachPipeline` | 证明高频感知环 (30 FPS) 与低频认知环 (1 Hz 异步线程) 解耦，基于 FSM 触底拐点与代偿阈值事件触发，视频 0 卡顿。 |
 | **异步流式打字机网关** | [`src/server/routes.py`](src/server/routes.py) | `chat_stream()` | 基于 FastAPI 与 `EventSourceResponse` (SSE) 实现单向流式推送与 ChatML 解析。 |
 
 ---
@@ -92,3 +93,18 @@
 - **【轨道 B：大厂专业得分词】**：
   > **得分关键词**：`单向事件流 (Server-Sent Events)`、`原生基于 HTTP/1.1 与 HTTP/2`、`浏览器原生断线重连`、`避免双向握手与心跳保活开销`。  
   > “大模型文本补全本质是‘单请求、多数据块’的单向输出流。SSE 原生基于 HTTP，轻量透明，天然支持浏览器断线重连；而 WebSocket 是全双工双向协议，在此场景下存在协议升级与心跳开销的过度设计（除非是实时双向多模态语音打断 Barge-in 场景才需引入 WebSocket）。”
+
+---
+
+### 🐟 鱼钩 8：端侧视频流 30 FPS，端侧大模型每秒才生成 26 tokens，一句话要 2 秒，你的视频流怎么做到不卡死的？
+- **【轨道 A：脑内物理直觉】**：
+  > 就像高速公路的“雷达测速探头与交警开罚单”：
+  > 探头（OpenCV + 几何力学计算）每秒抓拍 30 张，雷达测速飞快（<0.5ms）；交警（端侧 Qwen 大模型）绝不在每张抓拍照片上都开一张罚单，而是在车辆“严重超速（膝内扣突增）”或者“通过收费站最低点（下蹲触底拐点）”时，才抓出一张交给交警去写罚单（异步线程推理）。车流（前台视频流）依然 30 FPS 丝滑畅行，罚单写好后往屏幕底部牌子上一贴即可！
+- **【轨道 B：大厂专业得分词】**：
+  > **得分关键词**：`双频异构解耦 (Dual-Rate Heterogeneous Decoupling)`、`有限状态机极值拐点检测 (FSM Inflection Detection)`、`事件驱动非阻塞队列 (Event-Driven Non-blocking Queue)`、`异步 HUD 双缓冲回写`。  
+  > 对应代码：`run_video_coach.py` 与 `src/vision/motion_analyzer.py:SquatStateMachine`。  
+  > “该架构将实时质检解耦为两层：
+  > 1) **高频感知环 (30 Hz / <5ms)**：OpenCV 帧获取 + 纯向量内积几何解算 + 骨骼 HUD 实时光栅化，保证前台 30 FPS 零掉帧；
+  > 2) **状态机事件驱动 (Event-Driven)**：绝不按帧轮询大模型，而是通过有限状态机追踪角速度拐点（`BOTTOM_PEAK` 触底极值点）与连续内扣防抖阈值；
+  > 3) **低频认知环 (0.5~1 Hz)**：仅在拐点事件触发时，向后台 Worker 线程无锁投递 Prompt 任务，端侧 934MB Qwen 模型完成推理后原子回写字幕槽，实现高低频无缝协作。”
+
