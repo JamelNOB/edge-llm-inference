@@ -24,6 +24,13 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.memory.agent_memory import AgentMemoryEngine
 from src.knowledge.rule_engine import BiomechanicsRuleEngine
 
+# 尝试导入端侧 C++ 原生 Python 绑定 (支持内存常驻零磁盘 I/O 架构)
+try:
+    from llama_cpp import Llama
+    HAS_LLAMA_CPP = True
+except ImportError:
+    HAS_LLAMA_CPP = False
+
 
 class RobustCueParser:
     """
@@ -98,6 +105,23 @@ class LatPulldownEdgePipeline:
         # L1 内存用户画像缓存 (避免 30 FPS 高频循环中产生磁盘 I/O 阻塞与掉帧)
         self._l1_user_cache: Dict[str, str] = {}
 
+        # 初始化常驻内存引擎 (In-Memory Resident: 开机装入物理内存，彻底消除每帧冷启动 I/O)
+        self.resident_llm = None
+        if HAS_LLAMA_CPP and self.model_path and os.path.exists(self.model_path):
+            try:
+                print(f"[*] [内存常驻初始化] 正在将 {os.path.basename(self.model_path)} 装载至 RAM...")
+                t_load = time.perf_counter()
+                self.resident_llm = Llama(
+                    model_path=self.model_path,
+                    n_ctx=512,
+                    n_threads=8,
+                    verbose=False
+                )
+                load_cost = (time.perf_counter() - t_load) * 1000
+                print(f"[+] [内存常驻就绪] 权重装载耗时: {load_cost:.1f} ms | 后续推理实现零磁盘 I/O 极速直出！")
+            except Exception as e:
+                print(f"[!] 内存常驻初始化回退: {e}，切入 CLI 兼容模式")
+
     def _find_model(self) -> str:
         candidates = [
             str(PROJECT_ROOT / "models" / "qwen_lat_q4_k_m.gguf"),
@@ -146,10 +170,28 @@ class LatPulldownEdgePipeline:
 
     def run_inference_llm(self, prompt: str) -> Tuple[str, float]:
         """
-        调用端侧 941MB GGUF 大模型执行脱机推理
+        调用端侧 941MB GGUF 大模型执行推理：
+        优先：内存常驻架构 (In-Memory Resident, 零冷启动 I/O, 百毫秒直出)
+        兜底：C++ 外部进程 (llama-cli / llama-simple)
         """
         t0 = time.perf_counter()
         
+        # 1. 优先使用常驻内存引擎 (In-Memory Resident: 零磁盘 I/O，百毫秒级极速响应)
+        if self.resident_llm is not None:
+            try:
+                res = self.resident_llm(
+                    prompt,
+                    max_tokens=64,
+                    temperature=0.3,
+                    stop=["<|im_end|>", "<|endoftext|>"]
+                )
+                raw_out = res["choices"][0]["text"].strip()
+                latency_ms = (time.perf_counter() - t0) * 1000
+                return raw_out, latency_ms
+            except Exception as e:
+                pass
+
+        # 2. 兜底使用 C++ 外部进程 (Subprocess)
         if self.llama_bin and os.path.exists(self.llama_bin) and os.path.exists(self.model_path):
             if "llama-cli" in os.path.basename(self.llama_bin):
                 cmd = [
@@ -234,9 +276,13 @@ class LatPulldownEdgePipeline:
         # 4. 认知推理层：端侧 SLM 生成
         raw_llm_output, llm_latency_ms = self.run_inference_llm(prompt)
         
-        # 5. 解析与安全兜底：健壮解析器截取 8~12 字精炼短口令
-        rule_fallback = "挺胸沉肩，慢放两秒！" if rule_res["is_compliant"] else "核心收紧，减小后仰！"
-        coach_cue = RobustCueParser.extract_cue(raw_llm_output, rule_fallback_cue=rule_fallback)
+        # 5. 解析与安全兜底：
+        # 动作达标时输出正向激励口令；存在代偿违规时由大模型提取纠错指令
+        if rule_res["is_compliant"]:
+            coach_cue = "挺胸沉肩，动作标准！"
+        else:
+            rule_fallback = "核心收紧，减小后仰！"
+            coach_cue = RobustCueParser.extract_cue(raw_llm_output, rule_fallback_cue=rule_fallback)
         
         total_latency_ms = (time.perf_counter() - t_start) * 1000
         
