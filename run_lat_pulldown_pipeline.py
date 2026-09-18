@@ -37,6 +37,7 @@ class RobustCueParser:
         patterns = [
             r"(?:2[\.、\s]*)?即时纠错口令[\s:：]+([^\n\r<]+)",
             r"【(?:即时)?(?:纠错)?口令】[\s:：]+([^\n\r<]+)",
+            r"(?:1[\.、\s]*)?动作要点[\s:：]+([^\n\r<]+)",
             r"口令[\s:：]+([^\n\r<]+)",
             r">>>\s*([^\n\r<]+)"
         ]
@@ -51,15 +52,19 @@ class RobustCueParser:
         if not extracted:
             lines = [l.strip() for l in raw_output.split("\n") if l.strip()]
             for l in lines:
-                if not l.startswith("1.") and not l.startswith("3.") and not l.startswith("【"):
-                    extracted = l
+                cleaned = re.sub(r"^[0-9一二三四][\.、\s]*", "", l).strip()
+                if cleaned and not cleaned.startswith("【"):
+                    extracted = cleaned
                     break
 
         if not extracted:
             extracted = rule_fallback_cue
 
-        # 物理限制字数在 16 字内，避免健身场景长难句造成认知过载
+        # 剥离可能残留的引导词前缀
         extracted = extracted.replace("\"", "").replace("'", "").strip()
+        extracted = re.sub(r"^(?:即时纠错口令|动作要点|核心缺陷|质检诊断|纠错指导)[\s:：]+", "", extracted).strip()
+
+        # 物理限制字数在 16 字内，避免健身场景长难句造成认知过载
         if len(extracted) > 18:
             parts = re.split(r"[，。！；,!]", extracted)
             if parts and len(parts[0]) >= 4:
@@ -146,18 +151,36 @@ class LatPulldownEdgePipeline:
         t0 = time.perf_counter()
         
         if self.llama_bin and os.path.exists(self.llama_bin) and os.path.exists(self.model_path):
-            cmd = [
-                self.llama_bin,
-                "-m", self.model_path,
-                "-p", prompt,
-                "-n", "64",
-                "-t", "8",
-                "--temp", "0.3",
-                "-ngl", "0"  # 纯 CPU 推理测试真实端侧算力
-            ]
+            if "llama-cli" in os.path.basename(self.llama_bin):
+                cmd = [
+                    self.llama_bin,
+                    "-m", self.model_path,
+                    "-p", prompt,
+                    "-n", "64",
+                    "-t", "8",
+                    "--temp", "0.3",
+                    "-ngl", "0"
+                ]
+            else:
+                # llama-simple 极简 C++ 规约: -m <model> -n <tokens> [prompt]
+                cmd = [
+                    self.llama_bin,
+                    "-m", self.model_path,
+                    "-n", "64",
+                    prompt
+                ]
             try:
-                res = subprocess.run(cmd, capture_output=True, text=True, timeout=10, encoding="utf-8")
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=20, encoding="utf-8")
                 raw_out = res.stdout
+                
+                # 剥离底层 C++ Prompt 回显与调试信息，只提取模型生成的 assistant 正文
+                if "<|im_start|>assistant" in raw_out:
+                    raw_out = raw_out.split("<|im_start|>assistant")[-1].strip()
+                if "<|im_end|>" in raw_out:
+                    raw_out = raw_out.split("<|im_end|>")[0].strip()
+                if "main: decoded" in raw_out:
+                    raw_out = raw_out.split("main: decoded")[0].strip()
+
                 latency_ms = (time.perf_counter() - t0) * 1000
                 return raw_out, latency_ms
             except Exception as e:
