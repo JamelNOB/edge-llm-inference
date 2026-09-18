@@ -1,4 +1,38 @@
 {
+  "lat_pulldown": {
+    "action_name": "高位下拉 (Lat Pulldown)",
+    "target_muscle_groups": ["背阔肌", "大圆肌", "菱形肌", "斜方肌中下束", "肱二头肌"],
+    "grip_variants": {
+      "wide_grip": {
+        "variant_name": "宽握颈前下拉 (Wide Grip)",
+        "grip_ratio_threshold": 1.2,
+        "ideal_torso_angle": [10, 20],
+        "max_safe_torso_angle": 25,
+        "ideal_endpoint": "锁骨下方上胸位置",
+        "warning_message_angle": "宽握状态下躯干过度后仰借力，腰椎竖脊肌承受过多剪切应力",
+        "warning_message_endpoint": "下拉过浅或过低，未能充分缩短背阔肌纤维"
+      },
+      "close_grip": {
+        "variant_name": "窄握对握下拉 (Close Grip / V-Bar)",
+        "grip_ratio_threshold": 0.9,
+        "ideal_torso_angle": [15, 25],
+        "max_safe_torso_angle": 30,
+        "ideal_endpoint": "剑突至上胸下段位置",
+        "warning_message_angle": "窄握状态下后仰角度过大，动作变形为水平划船代偿",
+        "warning_message_endpoint": "手肘未向内贴近躯干拉至剑突"
+      }
+    },
+    "scapular_depression": {
+      "warning_ratio_below": 0.22,
+      "ideal_ratio_above": 0.28,
+      "warning_message": "上斜方肌严重耸肩代偿，肩胛骨未锁死下沉，背阔肌张力流失"
+    },
+    "injury_contraindications": {
+      "rotator_cuff_impingement": "肩袖撞击/损伤患者严禁做颈后下拉，横杠拉动行程不得低于锁骨平面",
+      "lumbar_strain": "腰肌劳损患者躯干后仰角严禁超过 15 度，严禁利用腰椎前后反弓摆动代偿",
+      "shoulder_asymmetry": "高低肩/脊柱轻度侧弯患者需强化弱侧背阔肌意念控制，严禁杠铃左右倾斜代偿"
+    }
+  },
   "squat": {
     "action_name": "深蹲 (Squat)",
     "target_muscle_groups": ["股四头肌", "臀大肌", "内收大肌", "核心肌群"],
