@@ -80,5 +80,27 @@ class TestAPIEndpoints(unittest.TestCase):
         self.assertTrue(has_data_chunk, "必须接收到合规的 JSON 数据块")
         self.assertTrue(has_done_signal, "流式响应必须以 [DONE] 结束")
 
+    def test_motion_coach_endpoint(self):
+        """测试 /v1/motion/coach 动作质检接口"""
+        payload = {
+            "action": "lat_pulldown",
+            "user_id": "test_api_user",
+            "metrics": {
+                "torso_angle": 15.0,
+                "scapula_ratio": 0.31,
+                "pull_pos_ratio": 0.12,
+                "grip_ratio": 1.35
+            },
+            "user_injury": "无已知伤病"
+        }
+        response = self.client.post("/v1/motion/coach", json=payload)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["action"], "高位下拉")
+        self.assertTrue(data["is_compliant"])
+        self.assertIn("coach_cue", data)
+        self.assertTrue(len(data["coach_cue"]) > 0)
+        self.assertTrue(data["llm_latency_ms"] >= 0)
+
 if __name__ == "__main__":
     unittest.main()

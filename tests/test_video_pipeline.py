@@ -14,7 +14,8 @@ import numpy as np
 from src.vision.motion_analyzer import SquatStateMachine, MotionPhase
 from src.vision.synthetic_motion_generator import SyntheticSquatGenerator
 from src.vision.video_annotator import VideoPostureAnnotator
-from run_video_coach import VideoPostureCoachPipeline
+from src.pipelines.video_coach import VideoPostureCoachPipeline
+
 
 
 class TestVideoPosturePipeline(unittest.TestCase):

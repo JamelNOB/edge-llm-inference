@@ -10,7 +10,8 @@ Unit Tests for Edge-Motion-Coach (实时运动姿态质检单元测试)
 import os
 import unittest
 from src.vision.pose_angle_calculator import PoseAngleCalculator
-from run_posture_coach import EdgePostureCoach
+from src.pipelines.posture_coach import EdgePostureCoach
+
 
 
 class TestEdgePostureCoach(unittest.TestCase):

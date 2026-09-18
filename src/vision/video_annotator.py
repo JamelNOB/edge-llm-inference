@@ -191,3 +191,41 @@ class VideoPostureAnnotator:
             frame = self.draw_text_cn(frame, display_text, (x1 + 15, y1 + 36), (255, 255, 255), 16)
 
         return frame
+
+    def render_hud(
+        self,
+        frame: np.ndarray,
+        landmarks: Dict[str, Tuple[float, float]],
+        metrics: Dict[str, Any],
+        state_machine: Any,
+        ai_advice: str,
+        is_inferring: bool = False
+    ) -> np.ndarray:
+        """
+        高阶端到端渲染：骨骼拓扑连线 + 左上角遥测仪表盘 + 底部 AI 教练口令条
+        """
+        if "shoulder" in landmarks and "hip" in landmarks and "knee" in landmarks and "ankle" in landmarks:
+            frame = self.draw_skeleton(
+                frame=frame,
+                shoulder=landmarks["shoulder"],
+                hip=landmarks["hip"],
+                knee=landmarks["knee"],
+                ankle=landmarks["ankle"],
+                has_valgus=metrics.get("has_valgus", False)
+            )
+
+        phase_str = state_machine.get_phase_desc() if hasattr(state_machine, "get_phase_desc") else str(getattr(state_machine, "current_phase", "STAND"))
+        rep_count = getattr(state_machine, "rep_count", 0)
+        frame = self.draw_hud(
+            frame=frame,
+            metrics=metrics,
+            phase_str=phase_str,
+            rep_count=rep_count
+        )
+
+        frame = self.draw_coach_banner(
+            frame=frame,
+            coach_advice=ai_advice,
+            is_inferring=is_inferring
+        )
+        return frame

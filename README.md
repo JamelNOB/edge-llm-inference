@@ -6,7 +6,7 @@
 [![Model](https://img.shields.io/badge/Model-Qwen2.5--1.5B--Instruct-6366F1.svg?style=flat-square)](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF)
 [![License](https://img.shields.io/badge/License-Apache%202.0-22C55E.svg?style=flat-square)](LICENSE)
 
-> **面向边缘 / 端侧计算受限场景的高性能、低延迟大语言模型全链路推理工程与轻量 Web 架构。**  
+> **面向边缘 / 端侧计算受限场景的高性能、低延迟大语言模型全链路推理工程与轻量 Web 架构。**
 > 涵盖 **LoRA 行为对齐微调 -> 权重无损 Merge -> GGUF Q4_K_M 极限压缩 -> llama.cpp C++ 底层推理 -> 分层 Agent 记忆治理** 全生命周期闭环。实测将 1.5B 模型权重压缩至 **934.69 MiB（压缩率 70.3%）**，在普通 8 线程 CPU 上实现 **Prefill 186.69 tokens/s** 与 **Decode 26.56 tokens/s** 的极速吞吐，单次推理内存缓冲开销仅 **~23 MiB**。
 
 ---
@@ -19,24 +19,24 @@ graph TD
     Gateway -->|"数据契约与校验"| Pydantic["Pydantic 数据模式 (src/core/schemas.py)"]
     Gateway --> Memory["[核心落盘] Agent 记忆治理引擎 (src/memory/agent_memory.py)<br/>3-Tier 记忆分层 + TTL 惰性淘汰 + Slot UPSERT"]
     Memory --> EngineCtrl["推理引擎控制器 (src/engine/llm_engine.py)"]
-    
+
     subgraph CoreEngine ["自研编排与优化层 (src/engine/)"]
         KVWarmup["[核心落盘] warmup_kv_cache (kv_cache.py)<br/>System Prompt 前向预计算锁存"]
         ThreadAlloc["硬件亲和线程拓扑调度 (config.py)"]
         ChatMLAlign["ChatML 结构化状态机与 Repetition Penalty"]
     end
-    
+
     EngineCtrl --> CoreEngine
-    
+
     subgraph InfraLayer ["开源基础底座 (Third-Party Substrate)"]
         LlamaCPP["llama.cpp C++ 推理引擎 (GGUF 反量化 / SIMD 并行)"]
         ModelWeights["Qwen2.5-1.5B Q4_K_M (934.69 MiB, 70.3% 压缩)"]
     end
-    
+
     CoreEngine --> InfraLayer
     InfraLayer -->|"逐 Token 生成 (Generator)"| SSE["SSE 流式生成器 (EventSourceResponse)"]
     SSE -->|"text/event-stream 持续推送"| Client
-    
+
     Monitor["实时探针 (src/utils/monitor.py)"] -.->|"50ms 周期采样 RSS 与 CPU"| Health["GET /health 健康监测接口"]
 ```
 
@@ -99,31 +99,33 @@ graph TD
 
 结合计算机视觉姿态几何提取、运动生物力学规范（RAG）与端侧 934MB 轻量大模型，实现首个**手机/边缘设备离线可跑的实时运动姿态质检与康复纠偏系统**（挑战杯全国二等奖 MotionPilot 2.0 升级版）：
 
-### 1. 核心架构与工程分层
+#### 1. 核心架构与工程分层
 - **前端感知层 (src/vision/pose_angle_calculator.py)**：纯向量几何计算人体膝关节屈曲角、膝内扣偏角与躯干前倾角（< 1ms，吞吐 500+ FPS），摆脱重型视觉大模型卡顿；
 - **行业知识库 (src/knowledge/biomechanics_rules.json)**：集成国家级运动解剖学生物力学阈值（深蹲深度、膝关节剪切极限、脊柱中立位）；
 - **动态风控记忆 (src/memory/agent_memory.py)**：根据用户 SQLite 既往伤病档案（如右膝半月板损伤，TTL 72小时），动态收紧安全告警容忍度；
-- **端侧极速推理 (
-un_posture_coach.py)**：基于量化至 934.69 MiB 的 Qwen2.5 核心，实时生成自然语言教练诊断与即时纠错口令。
+- **全链路总装流水线 (src/pipelines/)**：包含深蹲姿态质检（`posture_coach.py`）、双频异步视频质检（`video_coach.py`）与高位下拉端到端管线（`lat_pulldown_pipeline.py`），统一接入常驻内存的 EdgeLLMEngine 底座。
 
 ### 2. 快速运行与实测
-`ash
-# 运行实时姿态质检端到端测试
-python run_posture_coach.py
+```bash
+# 运行高位下拉全链路质检 (含握距路由与伤病禁忌)
+python scripts/run_lat_pulldown.py
+
+# 运行实时深蹲姿态质检
+python scripts/run_posture_coach.py
 
 # 运行自动化单测
-python -m unittest tests/test_posture_coach.py
-`
+python -m unittest discover tests
+```
 
 实测输出样例：
-`	ext
+```text
 【实时运动骨骼力学特征监测】
 - 目标动作: 深蹲 (Squat) | 膝关节屈曲角: 143.8° | 膝内扣: 严重代偿 | 既往病史: 右膝半月板轻微损伤 (TTL有效)
 ----------------------------------------------------------------------
 【动作结论】: 不合格 / 伤病降级
 【核心缺陷】: 膝关节严重内扣代偿 (偏移量: 40.0px)，且下蹲深度未达水平标准
 【纠错口令】: 膝关节主动向外展！启动臀中肌撑开双膝，直腿站起，严禁膝盖相撞！
-`
+```
 
 ---
 
@@ -131,34 +133,53 @@ python -m unittest tests/test_posture_coach.py
 
 ```text
 edge-llm-inference/
-├── src/                                  # 核心源码分层
+├── src/                                  # 核心源码工业化分层
 │   ├── core/                             # 基础抽象、全局配置与 Schema
-│   │   ├── config.py                     # 全局参数、量化选型注释与硬件分配策略
-│   │   └── schemas.py                    # Pydantic V2 请求与响应数据契约
-│   ├── engine/                           # 推理执行引擎与底层交互
-│   │   ├── llm_engine.py                 # EdgeLLMEngine 控制器 (含单例与 Mock 模式)
+│   │   ├── config.py                     # 全局参数、动态权重解析与硬件分配策略
+│   │   └── schemas.py                    # Pydantic V2 请求与响应数据契约 (Chat + Motion)
+│   ├── engine/                           # 推理执行引擎与底层交互 (统一常驻底座)
+│   │   ├── llm_engine.py                 # EdgeLLMEngine 控制器 (单例常驻、同步生成与自适应 Mock)
 │   │   └── kv_cache.py                   # [简历核心落盘] warmup_kv_cache 预热显式实现
 │   ├── memory/                           # [简历核心落盘] Agent 分层记忆治理引擎
 │   │   ├── __init__.py
 │   │   └── agent_memory.py               # SQLite 三层记忆 + TTL 淘汰 + UPSERT 冲突解决
+│   ├── knowledge/                        # 领域力学知识库与规则引擎
+│   │   ├── biomechanics_rules.json       # 国家级运动解剖学生物力学阈值表
+│   │   └── rule_engine.py                # 参数化规则比对、施密特迟滞区间与禁忌仲裁
+│   ├── vision/                           # 前端骨骼感知与视频渲染
+│   │   ├── pose_angle_calculator.py      # 纯几何向量内积解算 (<1ms)
+│   │   ├── motion_analyzer.py            # 有限状态机 (FSM) 拐点与内扣防抖检测
+│   │   ├── synthetic_motion_generator.py # 合成骨架视频流发生器
+│   │   └── video_annotator.py            # OpenCV 骨骼 HUD 实时仪表盘渲染
+│   ├── pipelines/                        # [核心业务总装] 端到端质检总装流水线
+│   │   ├── __init__.py
+│   │   ├── posture_coach.py              # 单帧/拐点极值深蹲质检
+│   │   ├── video_coach.py                # 双频异步异构解耦视频流质检管线
+│   │   └── lat_pulldown_pipeline.py      # 高位下拉端到端全链路 (含健壮口令解析器)
 │   ├── server/                           # Web 服务与 API 网关
 │   │   ├── app.py                        # FastAPI 应用装配与中间件
-│   │   ├── routes.py                     # /health, /v1/chat/stream 路由拆分
+│   │   ├── routes.py                     # /health, /v1/chat/stream, /v1/motion/coach 路由
 │   │   └── templates.py                  # 轻量交互控制台 HTML 模版
 │   └── utils/                            # 基础设施工具
 │       └── monitor.py                    # psutil 资源监测器与采样线程
-├── scripts/                              # 运维与评测套件
+├── scripts/                              # 运维、测试与一键 CLI 套件
+│   ├── run_lat_pulldown.py               # [一键体验] 高位下拉全链路质检 CLI
+│   ├── run_posture_coach.py              # [一键体验] 深蹲姿态质检 CLI
+│   ├── run_video_coach.py                # [一键体验] 视频流双频异步质检与 HUD 生成
 │   ├── benchmark_llama_cpp.sh            # [核心验证] llama-bench C++ 原生硬件压测脚本
 │   ├── quantize_model.sh                 # [核心验证] FP16 -> GGUF -> Q4_K_M 量化流水线
 │   ├── download_model.py                 # 自动化模型权重拉取 (ModelScope / HF 双通道)
-│   └── benchmark.py                      # 全自动化基准评测套件 (支持 HTTP 与内存直接测试)
+│   └── benchmark.py                      # 全自动化基准评测套件
 ├── configs/                              # 配置文件
 │   ├── train_qwen_lora.yaml              # [核心验证] LLaMA-Factory SFT LoRA 微调超参配置
 │   └── config.example.json               # 生产环境部署参数模版
 ├── tests/                                # 质量保障与回归验证
-│   ├── test_memory.py                    # [核心验证] 记忆分层与冲突覆写单元测试
-│   ├── test_client.py                    # 终端打字机流式验证客户端
 │   ├── test_core.py                      # 核心单元测试 (配置、Schema、KV预热)
+│   ├── test_memory.py                    # [核心验证] 记忆分层与冲突覆写单元测试
+│   ├── test_lat_pulldown.py              # 高位下拉与健壮口令解析测试
+│   ├── test_posture_coach.py             # 姿态质检单元测试
+│   ├── test_video_pipeline.py            # 状态机拐点与视频管线测试
+│   ├── test_client.py                    # 终端打字机流式验证客户端
 │   └── test_api.py                       # 接口集成测试 (FastAPI TestClient)
 ├── benchmarks/                           # 基准评测结果存储
 │   ├── llama_bench_report.md             # llama-bench 官方硬件压测实测报告
@@ -182,21 +203,22 @@ edge-llm-inference/
 pip install -r requirements.txt
 ```
 
-### 2. 运行 llama.cpp C++ 底层硬件压测
+### 2. 运行高位下拉端到端质检
 ```bash
-bash scripts/benchmark_llama_cpp.sh
+python scripts/run_lat_pulldown.py
 ```
 
-### 3. 运行分层记忆单元测试
+### 3. 运行全量自动化单测 (含自适应 Mock 验证)
 ```bash
-python -m unittest tests/test_memory.py
+python -m unittest discover tests
 ```
 
-### 4. 启动流式 Web 服务端
+### 4. 启动流式 Web 网关
 ```bash
 python main.py
 ```
-> 服务将在 `http://0.0.0.0:8000` 启动。访问 `http://127.0.0.1:8000/docs` 查看 Swagger API 文档，访问 `http://127.0.0.1:8000/` 体验流式控制台。
+> 服务将在 `http://0.0.0.0:8000` 启动。访问 `http://127.0.0.1:8000/docs` 查看 Swagger API 文档（含 `/v1/chat/stream` 与 `/v1/motion/coach`），访问 `http://127.0.0.1:8000/` 体验流式控制台。
+
 
 ---
 

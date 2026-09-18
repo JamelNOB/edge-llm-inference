@@ -23,8 +23,8 @@ class AgentMemoryEngine:
     """
     工业级轻量 Agent 记忆治理引擎
     """
-    def __init__(self, db_path: str = "agent_memory.db"):
-        self.db_path = db_path
+    def __init__(self, db_path: Optional[str] = None):
+        self.db_path = str(db_path) if db_path else "agent_memory.db"
         self._init_db()
 
     def _init_db(self):

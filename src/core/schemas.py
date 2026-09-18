@@ -34,3 +34,19 @@ class HealthResponse(BaseModel):
     server_pid: int = Field(..., description="Process ID of server")
     memory: MemoryMetrics
     system: SystemMetrics
+
+class MotionCoachRequest(BaseModel):
+    action: str = Field(default="lat_pulldown", description="运动动作名称 (如 'lat_pulldown', 'squat')")
+    user_id: str = Field(default="demo_user", description="学员唯一标识")
+    metrics: Dict[str, Any] = Field(..., description="前端解算出的多维连续运动力学特征字典")
+    user_injury: Optional[str] = Field(default=None, description="学员突发生理状态或伤病史 (支持 TTL 时效)")
+
+class MotionCoachResponse(BaseModel):
+    action: str = Field(..., description="动作名称")
+    variant: Optional[str] = Field(default=None, description="动作变体 (如宽握/窄握)")
+    is_compliant: bool = Field(..., description="力学规则判定是否合规")
+    faults: List[str] = Field(default_factory=list, description="力学违规项明细清单")
+    coach_cue: str = Field(..., description="端侧大模型提炼的 8~12 字高穿透力即时纠错短口令")
+    raw_output: Optional[str] = Field(default=None, description="端侧大模型原始输出")
+    llm_latency_ms: float = Field(..., description="大模型单次前向推理时延 (ms)")
+    total_latency_ms: float = Field(..., description="全链路端到端总时延 (ms)")

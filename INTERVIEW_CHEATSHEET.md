@@ -15,15 +15,17 @@
 | **Agent 分层记忆与 TTL 淘汰** | [`src/memory/agent_memory.py`](src/memory/agent_memory.py) | `AgentMemoryEngine`<br>`set_memory()`<br>`get_effective_memories()` | 证明通过 SQLite 惰性过期实现短时状态淘汰，杜绝历史状态污染长期用户画像。 |
 | **Slot UPSERT 冲突覆写** | [`src/memory/agent_memory.py`](src/memory/agent_memory.py) | `UNIQUE(user_id, key)`<br>`INSERT OR REPLACE` | 证明当用户喜好矛盾时，通过原子替换覆写旧记录，杜绝模型人格分裂。 |
 | **C++ 底层硬件压测** | [`scripts/benchmark_llama_cpp.sh`](scripts/benchmark_llama_cpp.sh)<br>[`benchmarks/llama_bench_report.md`](benchmarks/llama_bench_report.md) | `llama-bench` 指标 | 实测给出 Prefill 186.69 t/s 与 Decode 26.56 t/s 的真实硬件跑分。 |
-| **端侧双频异步视频质检** | [`run_video_coach.py`](run_video_coach.py)<br>[`src/vision/motion_analyzer.py`](src/vision/motion_analyzer.py) | `SquatStateMachine`<br>`VideoPostureCoachPipeline` | 证明高频感知环 (30 FPS) 与低频认知环 (1 Hz 异步线程) 解耦，基于 FSM 触底拐点与代偿阈值事件触发，视频 0 卡顿。 |
+| **端侧双频异步视频质检** | [`scripts/run_video_coach.py`](scripts/run_video_coach.py)<br>[`src/pipelines/video_coach.py`](src/pipelines/video_coach.py) | `SquatStateMachine`<br>`VideoPostureCoachPipeline` | 证明高频感知环 (30 FPS) 与低频认知环 (1 Hz 异步线程) 解耦，拔除假坐标占位，真力学指标流转，视频 0 卡顿。 |
 | **异步流式打字机网关** | [`src/server/routes.py`](src/server/routes.py) | `chat_stream()` | 基于 FastAPI 与 `EventSourceResponse` (SSE) 实现单向流式推送与 ChatML 解析。 |
+| **高位下拉全链路与短路门控** | [`src/pipelines/lat_pulldown_pipeline.py`](src/pipelines/lat_pulldown_pipeline.py)<br>[`scripts/run_lat_pulldown.py`](scripts/run_lat_pulldown.py) | `LatPulldownEdgePipeline`<br>`RobustCueParser` | 证明 Gated Execution 短路剪枝（合规帧 0ms 秒出）、单例常驻内存与 8~12 字高穿透短口令健壮解析。 |
+| **独立禁忌仲裁与零算术幻觉** | [`src/knowledge/rule_engine.py`](src/knowledge/rule_engine.py) | `BiomechanicsRuleEngine` | 证明腰肌劳损后仰 >15° 独立阻断、NaN/Inf 传感器突刺防护与 SFT 契约（用户既往生理状态）零漂移。 |
 
 ---
 
 ## 🛡️ 二、 一句话免死金牌说辞 (划清主理人工程边界)
 
-> **面试官追问底层细节时（如：“底层 CUDA Kernel 是怎么写的？SIMD 汇编怎么排布的？”）：**  
-> 
+> **面试官追问底层细节时（如：“底层 CUDA Kernel 是怎么写的？SIMD 汇编怎么排布的？”）：**
+>
 > 🗣️ **“我们项目定位于端侧应用与推理网关架构主理人。底层 GGUF 反量化与 CPU 矩阵计算依托于开源成熟的 llama.cpp C++ 底座；我的精力与核心自研工作聚焦在【端侧内存带宽瓶颈量化建模】、【Q4_K_M 混合精度量化选型】、【KV Cache 开机预热流水线】、【分层 Agent 记忆治理与冲突消解】以及【异步流式 Web 服务编排】，在保障生产级稳定性的同时避免重复造底层算子轮子。”**
 
 ---
@@ -35,7 +37,7 @@
 - **【轨道 A：脑内物理直觉】**：
   > CPU 推理就像搬砖。CPU 的小口袋（L3 缓存）只有几十 MB，放不下整个模型，模型全在主板内存里。每吐一个字都得把全量模型从内存“马路”运进 CPU 一遍。原版 3.09GB 太胖，马路直接塞车（带宽堵死）；量化瘦身到 934MB 后马路通畅了，一秒钟能搬更多趟，吐字自然暴涨 4.2 倍。
 - **【轨道 B：大厂专业得分词】**：
-  > **得分关键词**：`内存带宽受限 (Memory Bandwidth Bound)`、`自回归逐 Token 遍历访存`、`总线流量削减`。  
+  > **得分关键词**：`内存带宽受限 (Memory Bandwidth Bound)`、`自回归逐 Token 遍历访存`、`总线流量削减`。
   > “端侧 CPU 推理的核心瓶颈在于内存总线带宽而非算力。自回归模型每生成一个 Token 必须全量读取一次模型参数矩阵。原版 FP16 占满了带宽导致算力饥饿；Q4_K_M 量化将权重体积削减 70.3%，直接解除了访存总线拥塞，使得流式吞吐释放至 26.56 tokens/s。”
 
 ---
@@ -44,7 +46,7 @@
 - **【轨道 A：脑内物理直觉】**：
   > 保核心、砍外围。好比写文章，中心思想和关键词必须字斟句酌（保留 6-bit 高精度），而套话副词直接压成 4-bit 节省空间。
 - **【轨道 B：大厂专业得分词】**：
-  > **得分关键词**：`混合精度量化 (Mixed-Precision)`、`Attention 注意力保留 6-bit`、`FFN 前馈层压缩 4-bit`、`困惑度 (PPL) 损失几乎可忽略`。  
+  > **得分关键词**：`混合精度量化 (Mixed-Precision)`、`Attention 注意力保留 6-bit`、`FFN 前馈层压缩 4-bit`、`困惑度 (PPL) 损失几乎可忽略`。
   > “Q4_K_M 采用了非均匀的混合精度策略：决定长文本长程逻辑与注意力关联的 Attention 层保留 6-bit；参数量巨大但对量化噪声容忍度高的 FFN 前馈网络深度压缩至 4-bit。实测困惑度（PPL）恶化小于 0.045，实现了精度与带宽的极致工程平衡。”
 
 ---
@@ -53,7 +55,7 @@
 - **【轨道 A：脑内物理直觉】**：
   > 第一是没给答题卡：用户裸扔一句话，模型以为在玩成语接龙，进入自由瞎扯；第二是溜滑梯效应：一旦它吐出了第一个重复词，这个词就被写进了 KV Cache 记忆草稿纸，下一步模型看前面的词权重极高，马太效应越滚越大，彻底刹不住车！
 - **【轨道 B：大厂专业得分词】**：
-  > **得分关键词**：`ChatML 状态机模板对齐`、`KV Cache 累积注意力偏移`、`Repetition Penalty (重复惩罚)`、`EOS 动态截断`。  
+  > **得分关键词**：`ChatML 状态机模板对齐`、`KV Cache 累积注意力偏移`、`Repetition Penalty (重复惩罚)`、`EOS 动态截断`。
   > “本质在于两点：1) 输入必须显式注入 `<|im_start|>` 和 `<|im_end|>` 结构化标签，让模型正确进入 Assistant 解码状态机；2) 解码阶段必须施加 Repetition Penalty（对已在 KV Cache 中的 Token logits 实施衰减）并监听 EOS 提前 break 退出前向循环。”
 
 ---
@@ -62,8 +64,8 @@
 - **【轨道 A：脑内物理直觉】**：
   > 手机通讯录改电话号码。张三告诉你新号码，你直接用橡皮擦把旧号码擦掉、把新号码写上去（覆写 Update）。如果建两个张三，打电话时系统肯定人格分裂！
 - **【轨道 B：大厂专业得分词】**：
-  > **得分关键词**：`Slot 槽位化提取`、`UNIQUE 约束`、`UPSERT (INSERT OR REPLACE) 原子覆写`。  
-  > 对应代码：`src/memory/agent_memory.py:set_memory()`。  
+  > **得分关键词**：`Slot 槽位化提取`、`UNIQUE 约束`、`UPSERT (INSERT OR REPLACE) 原子覆写`。
+  > 对应代码：`src/memory/agent_memory.py:set_memory()`。
   > “在表结构设计中定义 `UNIQUE(user_id, key) ON CONFLICT REPLACE`。当用户状态发生变更（如‘喜欢吃辣’变为‘胃溃疡禁辣’），以相同的 key 触发原子覆写，保证库内只留存唯一最新的真实事实，杜绝矛盾信息并存污染大模型 Prompt。”
 
 ---
@@ -72,7 +74,7 @@
 - **【轨道 A：脑内物理直觉】**：
   > Prefill（读题）是学生一口气读完整张卷子，所有字都在眼前，可以拉上所有兄弟一起分工算矩阵；Decode（答题）是闭着眼睛按规律一个字一个字往外挤，每次挤一个字都得把整本字典搬出来看一眼！
 - **【轨道 B：大厂专业得分词】**：
-  > **得分关键词**：`Prefill 为计算密集型 (Compute-Bound)`、`Decode 为访存受限 (Memory-Bound)`、`GQA (分组查询注意力)`。  
+  > **得分关键词**：`Prefill 为计算密集型 (Compute-Bound)`、`Decode 为访存受限 (Memory-Bound)`、`GQA (分组查询注意力)`。
   > “Prefill 阶段由于所有输入 Token 均已知，矩阵乘法可充分并行化（GEMM），算力利用率高（实测达 186.69 t/s）；Decode 阶段每次仅生成单 Token（GEMV），算力处于饥饿等待状态，系统吞吐完全受制于从内存搬运权重的总线带宽。”
 
 ---
@@ -81,8 +83,8 @@
 - **【轨道 A：脑内物理直觉】**：
   > 厨师营业前先把葱姜蒜切好备在案板上（留好注意力草稿纸），客人进门点菜直接下锅开炒。绝对不是在脑子里死背一本外部百科全书！
 - **【轨道 B：大厂专业得分词】**：
-  > **得分关键词**：`键值张量常驻 (KV Tensors)`、`System Prompt 仅 eval 前向计算`、`增量追加计算 (Incremental Computation)`、`TTFT 压降至 100ms 以内`。  
-  > 对应代码：`src/engine/kv_cache.py:warmup_kv_cache()`。  
+  > **得分关键词**：`键值张量常驻 (KV Tensors)`、`System Prompt 仅 eval 前向计算`、`增量追加计算 (Incremental Computation)`、`TTFT 压降至 100ms 以内`。
+  > 对应代码：`src/engine/kv_cache.py:warmup_kv_cache()`。
   > “预热存的不是 RAG 外部知识，而是固定不变的系统提示词（System Prompt）在注意力网络中计算产生的 Key 和 Value 矩阵。开机时显式执行无损 `eval` 前向计算并锁定在内存；用户首个请求到达时直接从系统 Prompt 之后进行增量前向追加，首字延迟（TTFT）从冷启动的 ~650ms 压降至 100ms 左右。”
 
 ---
@@ -91,7 +93,7 @@
 - **【轨道 A：脑内物理直觉】**：
   > 大模型文字输出是单向广播打字机，不是双向打电话。单向广播用最轻的喇叭（SSE）就行，没必要架设双向全双工电话线（WebSocket）。
 - **【轨道 B：大厂专业得分词】**：
-  > **得分关键词**：`单向事件流 (Server-Sent Events)`、`原生基于 HTTP/1.1 与 HTTP/2`、`浏览器原生断线重连`、`避免双向握手与心跳保活开销`。  
+  > **得分关键词**：`单向事件流 (Server-Sent Events)`、`原生基于 HTTP/1.1 与 HTTP/2`、`浏览器原生断线重连`、`避免双向握手与心跳保活开销`。
   > “大模型文本补全本质是‘单请求、多数据块’的单向输出流。SSE 原生基于 HTTP，轻量透明，天然支持浏览器断线重连；而 WebSocket 是全双工双向协议，在此场景下存在协议升级与心跳开销的过度设计（除非是实时双向多模态语音打断 Barge-in 场景才需引入 WebSocket）。”
 
 ---
@@ -101,10 +103,38 @@
   > 就像高速公路的“雷达测速探头与交警开罚单”：
   > 探头（OpenCV + 几何力学计算）每秒抓拍 30 张，雷达测速飞快（<0.5ms）；交警（端侧 Qwen 大模型）绝不在每张抓拍照片上都开一张罚单，而是在车辆“严重超速（膝内扣突增）”或者“通过收费站最低点（下蹲触底拐点）”时，才抓出一张交给交警去写罚单（异步线程推理）。车流（前台视频流）依然 30 FPS 丝滑畅行，罚单写好后往屏幕底部牌子上一贴即可！
 - **【轨道 B：大厂专业得分词】**：
-  > **得分关键词**：`双频异构解耦 (Dual-Rate Heterogeneous Decoupling)`、`有限状态机极值拐点检测 (FSM Inflection Detection)`、`事件驱动非阻塞队列 (Event-Driven Non-blocking Queue)`、`异步 HUD 双缓冲回写`。  
-  > 对应代码：`run_video_coach.py` 与 `src/vision/motion_analyzer.py:SquatStateMachine`。  
+  > **得分关键词**：`双频异构解耦 (Dual-Rate Heterogeneous Decoupling)`、`有限状态机极值拐点检测 (FSM Inflection Detection)`、`事件驱动非阻塞队列 (Event-Driven Non-blocking Queue)`、`异步 HUD 双缓冲回写`。
+  > 对应代码：`run_video_coach.py` 与 `src/vision/motion_analyzer.py:SquatStateMachine`。
   > “该架构将实时质检解耦为两层：
   > 1) **高频感知环 (30 Hz / <5ms)**：OpenCV 帧获取 + 纯向量内积几何解算 + 骨骼 HUD 实时光栅化，保证前台 30 FPS 零掉帧；
   > 2) **状态机事件驱动 (Event-Driven)**：绝不按帧轮询大模型，而是通过有限状态机追踪角速度拐点（`BOTTOM_PEAK` 触底极值点）与连续内扣防抖阈值；
   > 3) **低频认知环 (0.5~1 Hz)**：仅在拐点事件触发时，向后台 Worker 线程无锁投递 Prompt 任务，端侧 934MB Qwen 模型完成推理后原子回写字幕槽，实现高低频无缝协作。”
 
+---
+
+### 🐟 鱼钩 9：为什么在 Linux 80 核多 Socket 服务器上跑 1.5B 模型反而会暴卡到 33.5 秒？你怎么优化的？
+- **【轨道 A：脑内物理直觉】**：
+  > 就像 80 个人围着一张小圆桌抢同一支笔写字：不仅写不快，反而所有时间都浪费在互相排队、互相推搡（自旋锁抢占）和跨房间传纸条（跨 NUMA Socket 内存穿透）上了！给 4 个人（4 线程）安安静静地写，1.5 秒就搞定了！
+- **【轨道 B：大厂专业得分词】**：
+  > **得分关键词**：`NUMA 跨节点总线穿透 (Cross-Socket Bus Contention)`、`OpenMP 自旋锁颠簸 (Spinlock Thrashing)`、`线程拓扑收敛 (Thread Affinity Clamping)`、`时延从 33.5s 压缩至 1.5s`。
+  > 对应代码：`src/core/config.py:DEFAULT_CPU_THREADS` 与 `src/engine/llm_engine.py`。
+  > “我们在双路 80 核 Linux 服务器（如 gn68，Node distance=21）实测发现，未约束线程时，llama-cpp-python 会默认拉满并发，导致 OpenMP 线程在跨 Socket 节点之间发生剧烈内存栅栏同步与自旋锁争抢，延迟飙升至 33.5 秒。我们通过显式硬约束 `OMP_NUM_THREADS=4`、`n_threads=4` 与 `n_threads_batch=4`，将线程局限在单一 NUMA Node 本地 L3 缓存范围内，实测端到端推理时延断崖式降低至 1.5 秒以内。”
+
+---
+
+### 🐟 鱼钩 10：高位下拉每秒都在动，端侧算力极弱，每帧都跑大模型手机受得了吗？
+- **【轨道 A：脑内物理直觉】**：
+  > 老师上课批作业：全对的学生一眼扫过打个勾（规则引擎 0ms 秒出鼓励口令），只有做错题的学生才停下来拿红笔详细写批语（大模型推理纠错）。
+- **【轨道 B：大厂专业得分词】**：
+  > **得分关键词**：`Gated Execution (短路门控剪枝)`、`端侧算力节能 (99% Compute Saving)`、`零时延秒出 (0.03ms)`、`异常降级保护 (Fallback Degradation)`。
+  > 对应代码：`src/pipelines/lat_pulldown_pipeline.py:process_motion_event()`。
+  > “在真实的边缘计算场景下，‘动作合格’占据运动过程的 80% 以上。我们在流水线中部署了 **Gated Execution（短路门控）**：当规则引擎测算出角度与肩胛完全合规时，直接短路返回确定性激励口令，端到端耗时仅 0.03ms，完全切断大模型前向推理；仅在检测到代偿变形或触发患者既往伤病禁忌（如腰肌劳损后仰 >15°）时，才激活大模型生成纠错短口令，节约端侧 99% 的电池与算力。”
+
+---
+
+### 🐟 鱼钩 11：你是怎么做代码审查与架构防穿帮落地的？
+- **【轨道 A：脑内物理直觉】**：
+  > 相当于让一个总指挥带着两个副官组成红蓝军互怼：一个专挑边界刺、注入假数据故意让系统崩盘（AG2 对抗审查）；一个专门拔除一切假代码、重构大厂分层规范（AG3 架构审计）；主指挥负责统筹硬件压测与最终合流，打造出无死角的工业级作品。
+- **【轨道 B：大厂专业得分词】**：
+  > **得分关键词**：`多智能体协同对抗测试 (/teamwork-preview)`、`大厂级全量架构重构 (/grill-me)`、`48项全自动化单元测试`、`Zero Schema Drift (契约零漂移)`。
+  > “我们构建了端到端工业级防御矩阵：消灭了根目录业务脚本各自重复造轮子的‘两层皮割裂’，统一收敛至 `EdgeLLMEngine` 单例底座；拔除了原视频质检中的伪坐标占位符；建立了腰肌劳损独立禁忌仲裁机制；并通过包含硬件崩溃模拟在内的 48 项全自动化测试套件，确保每一行代码在开源审查与技术深挖下 100% 真实可验。”

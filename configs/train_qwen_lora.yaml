@@ -5,19 +5,19 @@ finetuning_type: lora
 lora_target: all
 
 ### 模型与模板
-model_name_or_path: /home/liubo/.cache/modelscope/models/Qwen--Qwen2.5-1.5B-Instruct/snapshots/master
+model_name_or_path: Qwen/Qwen2.5-1.5B-Instruct
 template: qwen
 
 ### 数据集配置
 dataset: qa_judge
-dataset_dir: /home/liubo/llm_practice/data
+dataset_dir: ./data
 cutoff_len: 512
 max_samples: 100
 overwrite_cache: true
 preprocessing_num_workers: 2
 
 ### 输出与保存
-output_dir: /home/liubo/llm_practice/saves/qwen_lora
+output_dir: ./saves/qwen_lora
 logging_steps: 1
 save_steps: 10
 plot_loss: true
